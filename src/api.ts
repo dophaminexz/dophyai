@@ -33,6 +33,9 @@ export interface AppConfig {
   googleModels: string[];
   openrouterModels: string[];
   theme: ThemeConfig;
+  includeTime: boolean;
+  includeDate: boolean;
+  memories: string[];
 }
 
 export interface LogEntry {
@@ -86,7 +89,7 @@ export function isAutoMode(model: string): boolean {
 }
 
 // =============================================================================
-// Default Models (no -image variants)
+// Default Models
 // =============================================================================
 
 export const DEFAULT_GOOGLE_MODELS = [
@@ -112,6 +115,45 @@ export const DEFAULT_SYSTEM_PROMPT = `ПРАВИЛА ОФОРМЛЕНИЯ:
 3. Для таблиц используй Markdown формат (| col | col |).
 4. Если просят построить график, составь Markdown таблицу значений (X | Y) с минимум 10 точками.
 5. Для кода используй блоки \`\`\`язык ... \`\`\`.`;
+
+// =============================================================================
+// Build effective system prompt (with time, date, memories)
+// =============================================================================
+
+export function buildEffectiveSystemPrompt(config: AppConfig): string {
+  const contextParts: string[] = [];
+
+  if (config.includeDate) {
+    const dateStr = new Date().toLocaleDateString('ru-RU', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    contextParts.push(`Текущая дата: ${dateStr}`);
+  }
+
+  if (config.includeTime) {
+    const timeStr = new Date().toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    contextParts.push(`Текущее время: ${timeStr}`);
+  }
+
+  if (config.memories.length > 0) {
+    contextParts.push(
+      `ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ (запомни и учитывай):\n${config.memories.map(m => `- ${m}`).join('\n')}`
+    );
+  }
+
+  let prompt = config.systemPrompt;
+  if (contextParts.length > 0) {
+    prompt = contextParts.join('\n') + '\n\n' + prompt;
+  }
+
+  return prompt;
+}
 
 // =============================================================================
 // Utility Functions
