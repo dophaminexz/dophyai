@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, type FormEvent, type ChangeEvent, type KeyboardEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -25,7 +25,7 @@ import {
 } from './api';
 
 // =============================================================================
-// SVG Icons
+// SVG Icons (all)
 // =============================================================================
 const I = ({ d, className = 'w-5 h-5', fill }: { d: string; className?: string; fill?: boolean }) => (
   <svg className={className} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke={fill ? 'none' : 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
@@ -123,6 +123,9 @@ function IconPalette({ className = 'w-5 h-5' }: { className?: string }) {
 function IconWarning({ className = 'w-5 h-5' }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>;
 }
+function IconSwipe({ className = 'w-5 h-5' }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8" /><path d="M10 19v-3.96 3.15" /><path d="M7 19h5" /><path d="m16 12 3 3-3 3" /><path d="M19 15H13" /></svg>;
+}
 
 // =============================================================================
 // Theme Helpers
@@ -137,6 +140,13 @@ const ACCENT_COLORS: Record<ColorScheme, { name: string; swatch: string }> = {
 function applyThemeToDOM(theme: ThemeConfig) {
   document.documentElement.setAttribute('data-mode', theme.mode);
   document.documentElement.setAttribute('data-accent', theme.scheme);
+  // Update meta theme-color
+  const metaEls = document.querySelectorAll('meta[name="theme-color"]');
+  metaEls.forEach(m => m.remove());
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = theme.mode === 'dark' ? '#0d1117' : '#ffffff';
+  document.head.appendChild(meta);
 }
 
 // =============================================================================
@@ -222,6 +232,42 @@ function groupSessions(sessions: ChatSession[]) {
 }
 
 // =============================================================================
+// Swipe Hook
+// =============================================================================
+function useSwipe(onSwipeRight: () => void, onSwipeLeft: () => void) {
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const touchEnd = useRef<{ x: number } | null>(null);
+
+  const onTouchStart = useCallback((e: ReactTouchEvent) => {
+    touchEnd.current = null;
+    touchStart.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY };
+  }, []);
+
+  const onTouchMove = useCallback((e: ReactTouchEvent) => {
+    touchEnd.current = { x: e.targetTouches[0].clientX };
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    if (!touchStart.current || !touchEnd.current) return;
+    const dx = touchEnd.current.x - touchStart.current.x;
+    const minSwipe = 80;
+
+    // Only trigger if started near left edge for right-swipe
+    if (dx > minSwipe && touchStart.current.x < 40) {
+      onSwipeRight();
+    }
+    // Left swipe from anywhere
+    if (dx < -minSwipe) {
+      onSwipeLeft();
+    }
+    touchStart.current = null;
+    touchEnd.current = null;
+  }, [onSwipeRight, onSwipeLeft]);
+
+  return { onTouchStart, onTouchMove, onTouchEnd };
+}
+
+// =============================================================================
 // Markdown Renderer
 // =============================================================================
 function MarkdownContent({ content }: { content: string }) {
@@ -245,10 +291,10 @@ function MarkdownContent({ content }: { content: string }) {
           const codeId = uid();
           return (
             <div className="group/code relative my-3">
-              <button onClick={(e) => handleCopyCode(e, codeId)} className="absolute right-2 top-2 rounded-md bg-[var(--c-surface-h)] p-1.5 opacity-0 transition-opacity hover:bg-[var(--c-border-h)] group-hover/code:opacity-100" title="Copy code">
+              <button onClick={(e) => handleCopyCode(e, codeId)} className="absolute right-2 top-2 rounded-md bg-[var(--c-surface-h)] p-1.5 opacity-0 transition-opacity hover:bg-[var(--c-border-h)] group-hover/code:opacity-100 active:scale-95 touch-manipulation" title="Copy code">
                 {copiedId === codeId ? <IconCheck className="w-3.5 h-3.5 text-emerald-400" /> : <IconCopy className="w-3.5 h-3.5 text-[var(--c-text2)]" />}
               </button>
-              <pre {...props} className="overflow-x-auto rounded-xl bg-[var(--c-code-bg)] p-4 text-sm leading-relaxed border border-[var(--c-code-border)]">{children}</pre>
+              <pre {...props} className="overflow-x-auto rounded-xl bg-[var(--c-code-bg)] p-3 sm:p-4 text-sm leading-relaxed border border-[var(--c-code-border)]">{children}</pre>
             </div>
           );
         },
@@ -262,8 +308,8 @@ function MarkdownContent({ content }: { content: string }) {
         thead({ children, ...props }) {
           return <thead {...props} className="bg-[var(--c-surface)] text-left text-xs uppercase tracking-wider text-[var(--c-text2)]">{children}</thead>;
         },
-        th({ children, ...props }) { return <th {...props} className="px-4 py-2.5 font-semibold">{children}</th>; },
-        td({ children, ...props }) { return <td {...props} className="border-t border-[var(--c-border)] px-4 py-2">{children}</td>; },
+        th({ children, ...props }) { return <th {...props} className="px-3 py-2 sm:px-4 sm:py-2.5 font-semibold">{children}</th>; },
+        td({ children, ...props }) { return <td {...props} className="border-t border-[var(--c-border)] px-3 py-1.5 sm:px-4 sm:py-2">{children}</td>; },
         a({ children, href, ...props }) {
           return <a {...props} href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--c-accent-t)] underline decoration-[var(--c-accent-bg)] hover:decoration-[var(--c-accent-t)] transition-colors">{children}</a>;
         },
@@ -334,7 +380,7 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
     if (type === 'all' || type === 'keys') data.config = { googleKeys: config.googleKeys, openrouterKey: config.openrouterKey, systemPrompt: config.systemPrompt, googleModels: config.googleModels, openrouterModels: config.openrouterModels, theme: config.theme };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `gemini-chat-${type}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `alex-chat-${type}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click(); URL.revokeObjectURL(a.href);
     setImportStatus(`Exported ${type}`); setTimeout(() => setImportStatus(null), 3000);
   }, [sessions, config]);
@@ -381,27 +427,27 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
   return (
     <>
       <div className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} onClick={onClose} />
-      <div className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-lg flex-col bg-[var(--c-bg)] border-l border-[var(--c-border)] shadow-2xl transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed inset-y-0 right-0 z-50 flex w-full sm:w-[28rem] sm:max-w-lg flex-col bg-[var(--c-bg)] border-l border-[var(--c-border)] shadow-2xl transition-transform duration-300 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--c-border)] px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--c-border)] px-4 sm:px-6 py-3 sm:py-4 settings-safe-top">
           <div className="flex items-center gap-2.5">
             <IconSettings className="w-5 h-5 text-[var(--c-text2)]" />
-            <h2 className="text-lg font-semibold text-[var(--c-text)]">Settings</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-[var(--c-text)]">Settings</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-[var(--c-text3)] transition-colors hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text)]"><IconX /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-[var(--c-text3)] transition-colors hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text)] active:scale-95 touch-manipulation"><IconX /></button>
         </div>
 
-        {/* Tabs — scrollable */}
-        <div className="flex overflow-x-auto border-b border-[var(--c-border)] px-4">
+        {/* Tabs — scrollable horizontal */}
+        <div className="flex overflow-x-auto border-b border-[var(--c-border)] px-2 sm:px-4 hide-scrollbar">
           {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-3 text-xs font-medium transition-colors ${tab === t.id ? 'border-[var(--c-accent)] text-[var(--c-accent-t)]' : 'border-transparent text-[var(--c-text3)] hover:text-[var(--c-text2)]'}`}>
-              {t.icon}<span className="hidden sm:inline">{t.label}</span>
+            <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 sm:py-3 text-xs font-medium transition-colors touch-manipulation ${tab === t.id ? 'border-[var(--c-accent)] text-[var(--c-accent-t)]' : 'border-transparent text-[var(--c-text3)] hover:text-[var(--c-text2)]'}`}>
+              {t.icon}<span>{t.label}</span>
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 settings-safe-bottom">
           {/* ====== API Keys ====== */}
           {tab === 'keys' && (
             <div className="space-y-6">
@@ -413,26 +459,26 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
                 {config.googleKeys.length === 0 && (
                   <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400 flex items-start gap-2">
                     <IconWarning className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>No API keys added. Get a free key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">aistudio.google.com/apikey</a></span>
+                    <span>No API keys. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline font-medium">aistudio.google.com</a></span>
                   </div>
                 )}
                 <div className="space-y-1.5">
                   {config.googleKeys.map((key, i) => (
-                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2">
+                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2.5">
                       <code className="flex-1 truncate text-xs text-[var(--c-text2)] font-mono">{key.slice(0, 10)}...{key.slice(-4)}</code>
-                      <button onClick={() => removeGoogleKey(i)} className="rounded p-1 text-[var(--c-text3)] opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"><IconTrash className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => removeGoogleKey(i)} className="rounded p-1.5 text-[var(--c-text3)] transition-all hover:bg-red-500/20 hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 active:scale-95 touch-manipulation"><IconTrash className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <input type="text" value={newKey} onChange={e => setNewKey(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGoogleKey()} placeholder="AIzaSy..." className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
-                  <button onClick={addGoogleKey} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"><IconPlus className="w-3.5 h-3.5" />Add</button>
+                  <input type="text" value={newKey} onChange={e => setNewKey(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGoogleKey()} placeholder="AIzaSy..." className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2.5 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
+                  <button onClick={addGoogleKey} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2.5 text-sm font-medium text-white hover:opacity-90 active:scale-95 touch-manipulation"><IconPlus className="w-3.5 h-3.5" />Add</button>
                 </div>
               </div>
               <div className="border-t border-[var(--c-border)]" />
               <div>
                 <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconDeepSeek className="w-4 h-4 text-emerald-400" /> OpenRouter Key</label>
-                <input type="text" value={config.openrouterKey} onChange={e => update({ openrouterKey: e.target.value })} placeholder="sk-or-..." className="w-full rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
+                <input type="text" value={config.openrouterKey} onChange={e => update({ openrouterKey: e.target.value })} placeholder="sk-or-..." className="w-full rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2.5 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
               </div>
             </div>
           )}
@@ -442,41 +488,40 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
             <div className="space-y-6">
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconGoogle className="w-4 h-4 text-blue-400" /> Google Models <span className="rounded-full bg-[var(--c-accent-bg)] px-2 py-0.5 text-xs text-[var(--c-accent-t)]">{config.googleModels.length}</span></label>
-                  <button onClick={() => update({ googleModels: [...DEFAULT_GOOGLE_MODELS] })} className="rounded-lg border border-[var(--c-border)] px-2.5 py-1 text-[10px] text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)]">Reset</button>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconGoogle className="w-4 h-4 text-blue-400" /> Google <span className="rounded-full bg-[var(--c-accent-bg)] px-2 py-0.5 text-xs text-[var(--c-accent-t)]">{config.googleModels.length}</span></label>
+                  <button onClick={() => update({ googleModels: [...DEFAULT_GOOGLE_MODELS] })} className="rounded-lg border border-[var(--c-border)] px-2.5 py-1 text-[10px] text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation">Reset</button>
                 </div>
                 <div className="space-y-1">
                   {config.googleModels.map((m, i) => (
-                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2">
+                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2.5">
                       <span className="flex-1 truncate text-sm text-[var(--c-text)]">{m}</span>
                       {isImageCapableModel(m) && <span className="rounded bg-violet-500/20 px-1 py-0.5 text-[9px] font-bold text-violet-400">IMG</span>}
-                      <button onClick={() => removeGoogleModel(i)} className="rounded p-1 text-[var(--c-text3)] opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"><IconTrash className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => removeGoogleModel(i)} className="rounded p-1.5 text-[var(--c-text3)] transition-all hover:bg-red-500/20 hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 active:scale-95 touch-manipulation"><IconTrash className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                 </div>
                 <div className="mt-2 flex gap-2">
-                  <input type="text" value={newGoogleModel} onChange={e => setNewGoogleModel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGoogleModel()} placeholder="gemini-..." className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)]" />
-                  <button onClick={addGoogleModel} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"><IconPlus className="w-3.5 h-3.5" />Add</button>
+                  <input type="text" value={newGoogleModel} onChange={e => setNewGoogleModel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGoogleModel()} placeholder="gemini-..." className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2.5 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)]" />
+                  <button onClick={addGoogleModel} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2.5 text-sm font-medium text-white hover:opacity-90 active:scale-95 touch-manipulation"><IconPlus className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
               <div className="border-t border-[var(--c-border)]" />
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconDeepSeek className="w-4 h-4 text-emerald-400" /> OpenRouter Models <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">{config.openrouterModels.length}</span></label>
-                  <button onClick={() => update({ openrouterModels: [...DEFAULT_OPENROUTER_MODELS] })} className="rounded-lg border border-[var(--c-border)] px-2.5 py-1 text-[10px] text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)]">Reset</button>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconDeepSeek className="w-4 h-4 text-emerald-400" /> OpenRouter <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">{config.openrouterModels.length}</span></label>
+                  <button onClick={() => update({ openrouterModels: [...DEFAULT_OPENROUTER_MODELS] })} className="rounded-lg border border-[var(--c-border)] px-2.5 py-1 text-[10px] text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation">Reset</button>
                 </div>
                 <div className="space-y-1">
                   {config.openrouterModels.map((m, i) => (
-                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2">
+                    <div key={i} className="group flex items-center gap-2 rounded-lg bg-[var(--c-surface)] px-3 py-2.5">
                       <span className="flex-1 truncate text-sm text-[var(--c-text)]">{getModelShortName(m)}</span>
-                      <code className="text-[10px] text-[var(--c-text4)] font-mono hidden sm:block">{m}</code>
-                      <button onClick={() => removeOrModel(i)} className="rounded p-1 text-[var(--c-text3)] opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"><IconTrash className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => removeOrModel(i)} className="rounded p-1.5 text-[var(--c-text3)] transition-all hover:bg-red-500/20 hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 active:scale-95 touch-manipulation"><IconTrash className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                 </div>
                 <div className="mt-2 flex gap-2">
-                  <input type="text" value={newOrModel} onChange={e => setNewOrModel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addOrModel()} placeholder="provider/model-name:free" className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
-                  <button onClick={addOrModel} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"><IconPlus className="w-3.5 h-3.5" />Add</button>
+                  <input type="text" value={newOrModel} onChange={e => setNewOrModel(e.target.value)} onKeyDown={e => e.key === 'Enter' && addOrModel()} placeholder="provider/model:free" className="flex-1 rounded-lg border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 py-2.5 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none focus:border-[var(--c-accent-border)] font-mono" />
+                  <button onClick={addOrModel} className="flex items-center gap-1.5 rounded-lg bg-[var(--c-accent)] px-3 py-2.5 text-sm font-medium text-white hover:opacity-90 active:scale-95 touch-manipulation"><IconPlus className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             </div>
@@ -485,24 +530,22 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
           {/* ====== Theme ====== */}
           {tab === 'theme' && (
             <div className="space-y-8">
-              {/* Mode */}
               <div>
                 <label className="mb-3 block text-sm font-semibold text-[var(--c-text)]">Mode</label>
                 <div className="grid grid-cols-2 gap-3">
                   {([['dark', 'Dark', <IconMoon key="m" className="w-5 h-5" />], ['light', 'Light', <IconSun key="s" className="w-5 h-5" />]] as [ThemeMode, string, React.ReactNode][]).map(([mode, label, icon]) => (
-                    <button key={mode} onClick={() => updateTheme({ ...config.theme, mode })} className={`flex items-center justify-center gap-3 rounded-xl border-2 p-4 text-sm font-medium transition-all ${config.theme.mode === mode ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text2)] hover:border-[var(--c-border-h)]'}`}>
+                    <button key={mode} onClick={() => updateTheme({ ...config.theme, mode })} className={`flex items-center justify-center gap-3 rounded-xl border-2 p-4 text-sm font-medium transition-all active:scale-[0.97] touch-manipulation ${config.theme.mode === mode ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text2)] hover:border-[var(--c-border-h)]'}`}>
                       {icon}{label}
                     </button>
                   ))}
                 </div>
               </div>
-              {/* Color Scheme */}
               <div>
                 <label className="mb-3 block text-sm font-semibold text-[var(--c-text)]">Color Scheme</label>
                 <div className="grid grid-cols-2 gap-3">
                   {(Object.entries(ACCENT_COLORS) as [ColorScheme, { name: string; swatch: string }][]).map(([key, { name, swatch }]) => (
-                    <button key={key} onClick={() => updateTheme({ ...config.theme, scheme: key })} className={`flex items-center gap-3 rounded-xl border-2 p-4 text-sm font-medium transition-all ${config.theme.scheme === key ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text2)] hover:border-[var(--c-border-h)]'}`}>
-                      <div className="h-5 w-5 rounded-full shadow-sm" style={{ background: swatch }} />
+                    <button key={key} onClick={() => updateTheme({ ...config.theme, scheme: key })} className={`flex items-center gap-3 rounded-xl border-2 p-3.5 sm:p-4 text-sm font-medium transition-all active:scale-[0.97] touch-manipulation ${config.theme.scheme === key ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text2)] hover:border-[var(--c-border-h)]'}`}>
+                      <div className="h-5 w-5 rounded-full shadow-sm shrink-0" style={{ background: swatch }} />
                       {name}
                       {config.theme.scheme === key && <IconCheck className="w-4 h-4 ml-auto text-[var(--c-accent-t)]" />}
                     </button>
@@ -517,10 +560,10 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-[var(--c-text)]">System Instructions</label>
-                <button onClick={() => update({ systemPrompt: DEFAULT_SYSTEM_PROMPT })} className="rounded-lg border border-[var(--c-border)] px-3 py-1.5 text-xs text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)]">Reset</button>
+                <button onClick={() => update({ systemPrompt: DEFAULT_SYSTEM_PROMPT })} className="rounded-lg border border-[var(--c-border)] px-3 py-1.5 text-xs text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation">Reset</button>
               </div>
-              <textarea value={config.systemPrompt} onChange={e => update({ systemPrompt: e.target.value })} rows={20} className="w-full rounded-xl border border-[var(--c-border)] bg-[var(--c-input-bg)] p-4 text-sm leading-relaxed text-[var(--c-text)] outline-none focus:border-[var(--c-accent-border)] resize-none font-mono" />
-              <p className="text-xs text-[var(--c-text3)]">This prompt is sent with every request to define AI behavior.</p>
+              <textarea value={config.systemPrompt} onChange={e => update({ systemPrompt: e.target.value })} rows={16} className="w-full rounded-xl border border-[var(--c-border)] bg-[var(--c-input-bg)] p-3 sm:p-4 text-sm leading-relaxed text-[var(--c-text)] outline-none focus:border-[var(--c-accent-border)] resize-none font-mono" />
+              <p className="text-xs text-[var(--c-text3)]">Sent with every request to define AI behavior.</p>
             </div>
           )}
 
@@ -533,21 +576,20 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
               <div>
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconDownload className="w-4 h-4 text-[var(--c-accent-t)]" /> Export</h3>
                 <div className="space-y-2">
-                  <button onClick={() => exportData('all')} className="flex w-full items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-3 text-sm text-[var(--c-text2)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)]">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--c-accent-bg)]"><IconDownload className="w-4 h-4 text-[var(--c-accent-t)]" /></div>
-                    <div className="text-left"><p className="font-medium text-[var(--c-text)]">Full Backup</p><p className="text-xs text-[var(--c-text3)]">Chats, keys, models, prompt, theme</p></div>
-                    <span className="ml-auto text-[10px] text-[var(--c-text4)]">{sessions.length} chats · {config.googleKeys.length} keys · {config.googleModels.length + config.openrouterModels.length} models</span>
+                  <button onClick={() => exportData('all')} className="flex w-full items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-3 text-sm text-[var(--c-text2)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)] active:scale-[0.98] touch-manipulation">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--c-accent-bg)] shrink-0"><IconDownload className="w-4 h-4 text-[var(--c-accent-t)]" /></div>
+                    <div className="text-left min-w-0"><p className="font-medium text-[var(--c-text)]">Full Backup</p><p className="text-xs text-[var(--c-text3)] truncate">{sessions.length} chats · {config.googleKeys.length} keys · {config.googleModels.length + config.openrouterModels.length} models</p></div>
                   </button>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => exportData('chats')} className="flex items-center gap-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2.5 text-xs font-medium text-[var(--c-text3)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)]"><IconChat className="w-3.5 h-3.5" /> Chats only</button>
-                    <button onClick={() => exportData('keys')} className="flex items-center gap-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2.5 text-xs font-medium text-[var(--c-text3)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)]"><IconKey className="w-3.5 h-3.5" /> Config only</button>
+                    <button onClick={() => exportData('chats')} className="flex items-center gap-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2.5 text-xs font-medium text-[var(--c-text3)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)] active:scale-[0.98] touch-manipulation"><IconChat className="w-3.5 h-3.5" /> Chats only</button>
+                    <button onClick={() => exportData('keys')} className="flex items-center gap-2 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2.5 text-xs font-medium text-[var(--c-text3)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)] active:scale-[0.98] touch-manipulation"><IconKey className="w-3.5 h-3.5" /> Config only</button>
                   </div>
                 </div>
               </div>
               <div className="border-t border-[var(--c-border)]" />
               <div>
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]"><IconUpload className="w-4 h-4 text-emerald-400" /> Import</h3>
-                <button onClick={() => importFileRef.current?.click()} className="flex w-full items-center justify-center gap-3 rounded-xl border-2 border-dashed border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-6 text-sm text-[var(--c-text3)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)]">
+                <button onClick={() => importFileRef.current?.click()} className="flex w-full items-center justify-center gap-3 rounded-xl border-2 border-dashed border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-6 text-sm text-[var(--c-text3)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)] active:scale-[0.98] touch-manipulation">
                   <IconUpload className="w-5 h-5" /><div className="text-left"><p className="font-medium text-[var(--c-text2)]">Choose JSON file</p><p className="text-xs">Merges data — no duplicates</p></div>
                 </button>
               </div>
@@ -555,8 +597,8 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
               <div>
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-400"><IconTrash className="w-4 h-4" /> Danger Zone</h3>
                 <div className="space-y-2">
-                  <button onClick={() => { if (confirm('Delete ALL chats?')) { setSessions([]); saveSessions([]); setActiveSessionId(null); saveActiveId(null); setImportStatus('All chats deleted'); setTimeout(() => setImportStatus(null), 3000); } }} className="flex w-full items-center gap-3 rounded-xl border border-red-500/10 bg-red-500/5 px-4 py-3 text-sm text-red-400 hover:border-red-500/30 hover:bg-red-500/10"><IconTrash className="w-4 h-4" />Delete all chats <span className="ml-auto text-xs opacity-60">{sessions.length}</span></button>
-                  <button onClick={() => { if (confirm('Reset ALL settings?')) { const def: AppConfig = { googleKeys: [], openrouterKey: '', systemPrompt: DEFAULT_SYSTEM_PROMPT, googleModels: [...DEFAULT_GOOGLE_MODELS], openrouterModels: [...DEFAULT_OPENROUTER_MODELS], theme: { ...DEFAULT_THEME } }; setConfig(def); saveConfig(def); applyThemeToDOM(def.theme); setImportStatus('Settings reset'); setTimeout(() => setImportStatus(null), 3000); } }} className="flex w-full items-center gap-3 rounded-xl border border-amber-500/10 bg-amber-500/5 px-4 py-3 text-sm text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10"><IconSettings className="w-4 h-4" />Reset all settings</button>
+                  <button onClick={() => { if (confirm('Delete ALL chats?')) { setSessions([]); saveSessions([]); setActiveSessionId(null); saveActiveId(null); setImportStatus('All chats deleted'); setTimeout(() => setImportStatus(null), 3000); } }} className="flex w-full items-center gap-3 rounded-xl border border-red-500/10 bg-red-500/5 px-4 py-3 text-sm text-red-400 hover:border-red-500/30 hover:bg-red-500/10 active:scale-[0.98] touch-manipulation"><IconTrash className="w-4 h-4" />Delete all chats <span className="ml-auto text-xs opacity-60">{sessions.length}</span></button>
+                  <button onClick={() => { if (confirm('Reset ALL settings?')) { const def: AppConfig = { googleKeys: [], openrouterKey: '', systemPrompt: DEFAULT_SYSTEM_PROMPT, googleModels: [...DEFAULT_GOOGLE_MODELS], openrouterModels: [...DEFAULT_OPENROUTER_MODELS], theme: { ...DEFAULT_THEME } }; setConfig(def); saveConfig(def); applyThemeToDOM(def.theme); setImportStatus('Settings reset'); setTimeout(() => setImportStatus(null), 3000); } }} className="flex w-full items-center gap-3 rounded-xl border border-amber-500/10 bg-amber-500/5 px-4 py-3 text-sm text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 active:scale-[0.98] touch-manipulation"><IconSettings className="w-4 h-4" />Reset all settings</button>
                 </div>
               </div>
             </div>
@@ -567,14 +609,14 @@ function SettingsPanel({ open, onClose, config, setConfig, logs, clearLogs, sess
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-[var(--c-text)]">API Logs</span>
-                <button onClick={clearLogs} className="rounded-lg border border-[var(--c-border)] px-3 py-1.5 text-xs text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)]">Clear</button>
+                <button onClick={clearLogs} className="rounded-lg border border-[var(--c-border)] px-3 py-1.5 text-xs text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation">Clear</button>
               </div>
               <div className="space-y-1 rounded-xl bg-[var(--c-bg2)] p-3 font-mono text-xs max-h-[calc(100vh-220px)] overflow-y-auto">
                 {logs.length === 0 && <p className="text-[var(--c-text4)] py-8 text-center">No logs yet.</p>}
                 {logs.map((log, i) => (
                   <div key={i} className="flex gap-2 py-0.5">
                     <span className="shrink-0 text-[var(--c-text4)]">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                    <span className={log.level === 'error' ? 'text-red-400' : log.level === 'warn' ? 'text-amber-400' : 'text-[var(--c-text2)]'}>{log.message}</span>
+                    <span className={`break-all ${log.level === 'error' ? 'text-red-400' : log.level === 'warn' ? 'text-amber-400' : 'text-[var(--c-text2)]'}`}>{log.message}</span>
                   </div>
                 ))}
                 <div ref={logsEndRef} />
@@ -613,28 +655,29 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
 
   return (
     <>
+      {/* Overlay — mobile only */}
       <div className={`fixed inset-0 z-30 bg-black/50 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} onClick={onClose} />
-      <aside className={`fixed left-0 top-0 z-30 flex h-full w-72 flex-col border-r border-[var(--c-border)] bg-[var(--c-bg2)] transition-transform duration-300 lg:relative lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed left-0 top-0 z-30 flex h-full w-[85vw] max-w-[300px] flex-col border-r border-[var(--c-border)] bg-[var(--c-bg2)] transition-transform duration-300 ease-out lg:relative lg:w-72 lg:max-w-none lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-[var(--c-border)] px-5 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `linear-gradient(135deg, var(--c-accent), var(--c-accent-h))` }}>
+        <div className="flex items-center gap-3 border-b border-[var(--c-border)] px-4 sm:px-5 py-3 sm:py-4 sidebar-safe-top">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0" style={{ background: `linear-gradient(135deg, var(--c-accent), var(--c-accent-h))` }}>
             <IconSparkle className="w-4 h-4 text-white" />
           </div>
           <span className="text-base font-semibold text-[var(--c-text)] tracking-tight">Alex Chat</span>
-          <button onClick={onClose} className="ml-auto rounded-lg p-1 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] lg:hidden"><IconX className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] lg:hidden active:scale-95 touch-manipulation"><IconX className="w-4 h-4" /></button>
         </div>
 
         {/* New Chat */}
         <div className="px-3 pt-3 pb-1">
-          <button onClick={() => { onNewChat(); onClose(); }} className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3.5 py-2.5 text-sm font-medium text-[var(--c-text2)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)] hover:text-[var(--c-text)] active:scale-[0.98]">
+          <button onClick={() => { onNewChat(); onClose(); }} className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3.5 py-2.5 text-sm font-medium text-[var(--c-text2)] transition-all hover:border-[var(--c-accent-border)] hover:bg-[var(--c-accent-bg)] hover:text-[var(--c-text)] active:scale-[0.97] touch-manipulation">
             <IconPlus className="w-4 h-4" /> New Chat
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex-1 overflow-y-auto px-3 py-2 sidebar-safe-bottom">
           {/* Models (collapsible) */}
           <div className="mb-1">
-            <button onClick={() => setModelsOpen(!modelsOpen)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-widest text-[var(--c-text3)] hover:text-[var(--c-text2)]">
+            <button onClick={() => setModelsOpen(!modelsOpen)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-widest text-[var(--c-text3)] hover:text-[var(--c-text2)] touch-manipulation">
               <IconChip className="w-3.5 h-3.5" /> Models
               <IconChevron className={`w-3 h-3 ml-auto transition-transform duration-200 ${modelsOpen ? '' : '-rotate-90'}`} />
             </button>
@@ -647,7 +690,7 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
                     {config.googleModels.map(m => {
                       const active = selectedModel === m;
                       return (
-                        <button key={m} onClick={() => onSelectModel(m)} className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13px] transition-all ${active ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]'}`}>
+                        <button key={m} onClick={() => { onSelectModel(m); onClose(); }} className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-all touch-manipulation ${active ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] active:bg-[var(--c-surface-h)]'}`}>
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-[var(--c-accent)]' : 'bg-[var(--c-text4)]'}`} />
                           <span className="flex-1 truncate font-medium">{m}</span>
                           {isImageCapableModel(m) && <span className="shrink-0 rounded bg-violet-500/20 px-1 py-0.5 text-[9px] font-bold text-violet-400">IMG</span>}
@@ -663,7 +706,7 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
                     {config.openrouterModels.map(m => {
                       const active = selectedModel === m;
                       return (
-                        <button key={m} onClick={() => onSelectModel(m)} className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-[13px] transition-all ${active ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]'}`}>
+                        <button key={m} onClick={() => { onSelectModel(m); onClose(); }} className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-all touch-manipulation ${active ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent-t)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] active:bg-[var(--c-surface-h)]'}`}>
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-[var(--c-accent)]' : 'bg-[var(--c-text4)]'}`} />
                           <span className="flex-1 truncate font-medium">{getModelShortName(m)}</span>
                           <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-bold text-emerald-400">FREE</span>
@@ -673,7 +716,7 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
                   </div>
                 )}
                 {config.googleModels.length === 0 && config.openrouterModels.length === 0 && (
-                  <p className="px-3 py-4 text-center text-xs text-[var(--c-text3)]">No models. Add some in Settings.</p>
+                  <p className="px-3 py-4 text-center text-xs text-[var(--c-text3)]">No models. Add in Settings.</p>
                 )}
               </div>
             </div>
@@ -686,7 +729,7 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
             <IconChat className="w-3.5 h-3.5 text-[var(--c-text3)]" />
             <span className="text-[11px] font-semibold uppercase tracking-widest text-[var(--c-text3)]">Chats</span>
             {sessions.length > 0 && <span className="rounded-full bg-[var(--c-surface)] px-1.5 py-0.5 text-[10px] text-[var(--c-text4)]">{sessions.length}</span>}
-            {sessions.length > 0 && <button onClick={onClearAllSessions} className="ml-auto rounded p-1 text-[var(--c-text4)] hover:bg-red-500/10 hover:text-red-400" title="Clear all"><IconTrash className="w-3.5 h-3.5" /></button>}
+            {sessions.length > 0 && <button onClick={onClearAllSessions} className="ml-auto rounded p-1.5 text-[var(--c-text4)] hover:bg-red-500/10 hover:text-red-400 active:scale-95 touch-manipulation" title="Clear all"><IconTrash className="w-3.5 h-3.5" /></button>}
           </div>
 
           {sessions.length === 0 ? (
@@ -704,7 +747,7 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
                       const isActive = s.id === activeSessionId;
                       const isEditing = editingId === s.id;
                       return (
-                        <div key={s.id} className={`group flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer transition-all ${isActive ? 'bg-[var(--c-surface-active)] text-[var(--c-text)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]'}`} onClick={() => { if (!isEditing) { onSelectSession(s.id); onClose(); } }}>
+                        <div key={s.id} className={`group flex items-center gap-2 rounded-xl px-3 py-2.5 cursor-pointer transition-all touch-manipulation ${isActive ? 'bg-[var(--c-surface-active)] text-[var(--c-text)]' : 'text-[var(--c-text2)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] active:bg-[var(--c-surface-h)]'}`} onClick={() => { if (!isEditing) { onSelectSession(s.id); onClose(); } }}>
                           <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-[var(--c-accent-bg)]' : 'bg-[var(--c-surface)]'}`}>
                             <IconChat className={`w-3 h-3 ${isActive ? 'text-[var(--c-accent-t)]' : 'text-[var(--c-text4)]'}`} />
                           </div>
@@ -719,9 +762,9 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
                               <span className="text-[10px] text-[var(--c-text4)]">{relTime(s.updatedAt)}</span>
                             </div>
                           </div>
-                          <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                            <button onClick={e => { e.stopPropagation(); setEditingId(s.id); setEditTitle(s.title); }} className="rounded-md p-1 text-[var(--c-text4)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)]" title="Rename"><IconEdit /></button>
-                            <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id); }} className="rounded-md p-1 text-[var(--c-text4)] hover:bg-red-500/15 hover:text-red-400" title="Delete"><IconTrash className="w-3.5 h-3.5" /></button>
+                          <div className="flex shrink-0 gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            <button onClick={e => { e.stopPropagation(); setEditingId(s.id); setEditTitle(s.title); }} className="rounded-md p-1.5 text-[var(--c-text4)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation" title="Rename"><IconEdit /></button>
+                            <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id); }} className="rounded-md p-1.5 text-[var(--c-text4)] hover:bg-red-500/15 hover:text-red-400 active:scale-95 touch-manipulation" title="Delete"><IconTrash className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       );
@@ -733,10 +776,11 @@ function Sidebar({ open, onClose, selectedModel, onSelectModel, config, sessions
           )}
         </div>
 
+        {/* Bottom bar */}
         <div className="border-t border-[var(--c-border)] px-4 py-3">
           <div className="flex items-center justify-center gap-2">
             <div className={`h-1.5 w-1.5 rounded-full ${isGoogleModel(selectedModel) ? 'bg-blue-400' : 'bg-emerald-400'}`} />
-            <p className="text-[11px] text-[var(--c-text3)] font-medium">{getModelShortName(selectedModel)}</p>
+            <p className="text-[11px] text-[var(--c-text3)] font-medium truncate">{getModelShortName(selectedModel)}</p>
           </div>
         </div>
       </aside>
@@ -753,24 +797,24 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   const handleCopy = () => { navigator.clipboard.writeText(message.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
 
   return (
-    <div className="group flex gap-3 px-4 py-3 sm:px-6">
-      <div className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isUser ? 'bg-[var(--c-surface-active)]' : ''}`} style={!isUser ? { background: `linear-gradient(135deg, var(--c-accent), var(--c-accent-h))` } : undefined}>
-        {isUser ? <IconUser className="w-3.5 h-3.5 text-[var(--c-text2)]" /> : <IconSparkle className="w-3.5 h-3.5 text-white" />}
+    <div className="group flex gap-2.5 sm:gap-3 px-3 py-2 sm:px-6 sm:py-3">
+      <div className={`mt-1 flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-full ${isUser ? 'bg-[var(--c-surface-active)]' : ''}`} style={!isUser ? { background: `linear-gradient(135deg, var(--c-accent), var(--c-accent-h))` } : undefined}>
+        {isUser ? <IconUser className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[var(--c-text2)]" /> : <IconSparkle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="mb-1.5 flex items-center gap-2">
+        <div className="mb-1 sm:mb-1.5 flex items-center gap-2">
           <span className="text-xs font-semibold text-[var(--c-text2)]">{isUser ? 'You' : (message.model ? getModelShortName(message.model) : 'Alex')}</span>
           <span className="text-[10px] text-[var(--c-text4)]">{new Date(message.timestamp).toLocaleTimeString()}</span>
         </div>
         {message.images && message.images.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
-            {message.images.map((img, i) => <img key={i} src={img} alt="" className="h-32 rounded-lg border border-[var(--c-border)] object-cover" />)}
+            {message.images.map((img, i) => <img key={i} src={img} alt="" className="h-20 sm:h-32 rounded-lg border border-[var(--c-border)] object-cover" />)}
           </div>
         )}
         {isUser ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--c-text)]">{message.content}</p>
         ) : (
-          <div className="rounded-2xl bg-[var(--c-surface)] border border-[var(--c-border)] px-4 py-3">
+          <div className="rounded-2xl bg-[var(--c-surface)] border border-[var(--c-border)] px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="prose-custom text-sm leading-relaxed text-[var(--c-text2)]">
               {message.isStreaming && !message.content ? (
                 <div className="flex items-center gap-2 text-[var(--c-text3)] py-1">
@@ -783,13 +827,13 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             </div>
             {message.responseImages && message.responseImages.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {message.responseImages.map((img, i) => <a key={i} href={img} target="_blank" rel="noopener noreferrer"><img src={img} alt="" className="max-h-80 rounded-xl border border-[var(--c-border)] object-contain" /></a>)}
+                {message.responseImages.map((img, i) => <a key={i} href={img} target="_blank" rel="noopener noreferrer"><img src={img} alt="" className="max-h-60 sm:max-h-80 rounded-xl border border-[var(--c-border)] object-contain" /></a>)}
               </div>
             )}
           </div>
         )}
         {!isUser && message.content && !message.isStreaming && (
-          <button onClick={handleCopy} className="mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--c-text4)] opacity-0 transition-all hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] group-hover:opacity-100">
+          <button onClick={handleCopy} className="mt-1 sm:mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-[var(--c-text4)] transition-all hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] sm:opacity-0 sm:group-hover:opacity-100 active:scale-95 touch-manipulation">
             {copied ? <><IconCheck className="w-3 h-3 text-emerald-400" />Copied</> : <><IconCopy className="w-3 h-3" />Copy</>}
           </button>
         )}
@@ -822,11 +866,28 @@ export function App() {
   const messages = activeSession?.messages || [];
   const hasKeys = config.googleKeys.length > 0 || !!config.openrouterKey;
 
+  // Swipe gesture for sidebar
+  const swipeHandlers = useSwipe(
+    () => { if (!settingsOpen) setSidebarOpen(true); },
+    () => { if (sidebarOpen) setSidebarOpen(false); }
+  );
+
   // Apply theme on mount & changes
   useEffect(() => { applyThemeToDOM(config.theme); }, [config.theme]);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { const t = setTimeout(() => saveSessions(sessions), 300); return () => clearTimeout(t); }, [sessions]);
   useEffect(() => { saveActiveId(activeSessionId); }, [activeSessionId]);
+
+  // Prevent iOS overscroll bounce
+  useEffect(() => {
+    const preventBounce = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.overflow-y-auto, .overflow-x-auto, textarea')) return;
+      e.preventDefault();
+    };
+    document.addEventListener('touchmove', preventBounce, { passive: false });
+    return () => document.removeEventListener('touchmove', preventBounce);
+  }, []);
 
   const addLog = useCallback((e: LogEntry) => { setLogs(p => [...p.slice(-200), e]); }, []);
   const handleModelSelect = useCallback((m: string) => { setSelectedModel(m); saveModel(m); }, []);
@@ -908,57 +969,62 @@ export function App() {
   }, [input, attachedImages, isLoading, activeSessionId, sessions, selectedModel, config, addLog]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }, [handleSend]);
-  const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => { setInput(e.target.value); const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 200) + 'px'; }, []);
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => { setInput(e.target.value); const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }, []);
 
   return (
-    <div className="flex h-screen bg-[var(--c-bg)] text-[var(--c-text)] font-[Inter,system-ui,sans-serif]">
+    <div className="flex h-[100dvh] bg-[var(--c-bg)] text-[var(--c-text)] font-[Inter,system-ui,sans-serif] overflow-hidden" {...swipeHandlers}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} selectedModel={selectedModel} onSelectModel={handleModelSelect} config={config} sessions={sessions} activeSessionId={activeSessionId} onSelectSession={handleSelectSession} onNewChat={handleNewChat} onDeleteSession={handleDeleteSession} onRenameSession={handleRenameSession} onClearAllSessions={handleClearAllSessions} />
 
       <div className="flex flex-1 flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center gap-3 border-b border-[var(--c-border)] bg-[var(--c-bg)] px-4 py-3 sm:px-6">
-          <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] lg:hidden"><IconMenu /></button>
-          <div className="flex items-center gap-2.5">
-            <div className={`h-2 w-2 rounded-full ${isGoogleModel(selectedModel) ? 'bg-blue-400' : 'bg-emerald-400'}`} />
-            <span className="text-sm font-medium text-[var(--c-text2)] truncate max-w-[200px] sm:max-w-none">{getModelShortName(selectedModel)}</span>
-            {isImageCapableModel(selectedModel) && <span className="rounded-md bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-400">IMG</span>}
+        <header className="flex items-center gap-2 sm:gap-3 border-b border-[var(--c-border)] bg-[var(--c-bg)] px-3 sm:px-6 py-2.5 sm:py-3 header-safe-top">
+          <button onClick={() => setSidebarOpen(true)} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] lg:hidden active:scale-95 touch-manipulation"><IconMenu /></button>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className={`h-2 w-2 rounded-full shrink-0 ${isGoogleModel(selectedModel) ? 'bg-blue-400' : 'bg-emerald-400'}`} />
+            <span className="text-sm font-medium text-[var(--c-text2)] truncate">{getModelShortName(selectedModel)}</span>
+            {isImageCapableModel(selectedModel) && <span className="hidden sm:inline rounded-md bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-400 shrink-0">IMG</span>}
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            <button onClick={handleNewChat} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]" title="New chat"><IconNewChat /></button>
-            <button onClick={() => setSettingsOpen(true)} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]" title="Settings"><IconSettings /></button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button onClick={handleNewChat} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] active:scale-95 touch-manipulation" title="New chat"><IconNewChat className="w-[18px] h-[18px] sm:w-5 sm:h-5" /></button>
+            <button onClick={() => setSettingsOpen(true)} className="rounded-lg p-2 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] active:scale-95 touch-manipulation" title="Settings"><IconSettings className="w-[18px] h-[18px] sm:w-5 sm:h-5" /></button>
           </div>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
           {messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center p-8">
+            <div className="flex h-full flex-col items-center justify-center p-4 sm:p-8">
               {!hasKeys && (
-                <div className="mb-6 w-full max-w-md rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+                <div className="mb-4 sm:mb-6 w-full max-w-md rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-5">
                   <div className="flex items-start gap-3">
                     <IconWarning className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-amber-400 mb-1">Setup Required</p>
                       <p className="text-xs text-[var(--c-text2)] mb-3">Add at least one API key to start chatting.</p>
-                      <button onClick={() => setSettingsOpen(true)} className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/30">Open Settings</button>
+                      <button onClick={() => setSettingsOpen(true)} className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/30 active:scale-95 touch-manipulation">Open Settings</button>
                     </div>
                   </div>
                 </div>
               )}
-              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--c-accent-bg)] ring-1 ring-[var(--c-accent-glow)]">
-                <IconSparkle className="w-8 h-8 text-[var(--c-accent-t)]" />
+              <div className="mb-4 sm:mb-6 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-[var(--c-accent-bg)] ring-1 ring-[var(--c-accent-glow)]">
+                <IconSparkle className="w-7 h-7 sm:w-8 sm:h-8 text-[var(--c-accent-t)]" />
               </div>
-              <h1 className="mb-2 text-2xl font-semibold text-[var(--c-text)]">Alex Chat</h1>
-              <p className="mb-8 max-w-md text-center text-sm text-[var(--c-text3)]">AI assistant with Google Gemini & DeepSeek. LaTeX, Markdown, code, images.</p>
-              <div className="grid max-w-lg gap-2 sm:grid-cols-2">
+              <h1 className="mb-2 text-xl sm:text-2xl font-semibold text-[var(--c-text)]">Alex Chat</h1>
+              <p className="mb-6 sm:mb-8 max-w-md text-center text-xs sm:text-sm text-[var(--c-text3)]">AI assistant with Google Gemini & DeepSeek</p>
+              {/* Mobile swipe hint */}
+              <div className="mb-4 flex items-center gap-2 text-[10px] text-[var(--c-text4)] lg:hidden">
+                <IconSwipe className="w-4 h-4" />
+                <span>Swipe from left edge for sidebar</span>
+              </div>
+              <div className="grid w-full max-w-lg gap-2 grid-cols-1 sm:grid-cols-2">
                 {[
                   { text: 'Explain quantum computing', icon: <IconChip className="w-4 h-4" /> },
                   { text: 'Write a Python sort algorithm', icon: <IconTerminal className="w-4 h-4" /> },
                   { text: 'Solve: $\\int x^2 dx$', icon: <IconSparkle className="w-4 h-4" /> },
                   { text: 'Compare React vs Vue', icon: <IconPrompt className="w-4 h-4" /> },
                 ].map((ex, i) => (
-                  <button key={i} onClick={() => { setInput(ex.text); inputRef.current?.focus(); }} className="flex items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-3 text-left text-sm text-[var(--c-text2)] transition-all hover:border-[var(--c-border-h)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text)]">
-                    <span className="text-[var(--c-text3)]">{ex.icon}</span>{ex.text}
+                  <button key={i} onClick={() => { setInput(ex.text); inputRef.current?.focus(); }} className="flex items-center gap-3 rounded-xl border border-[var(--c-border)] bg-[var(--c-surface)] px-3.5 py-3 text-left text-sm text-[var(--c-text2)] transition-all hover:border-[var(--c-border-h)] hover:bg-[var(--c-surface-h)] hover:text-[var(--c-text)] active:scale-[0.98] touch-manipulation">
+                    <span className="text-[var(--c-text3)] shrink-0">{ex.icon}</span><span className="truncate">{ex.text}</span>
                   </button>
                 ))}
               </div>
@@ -972,31 +1038,34 @@ export function App() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-[var(--c-border)] bg-[var(--c-bg)] p-3 sm:p-4">
-          <div className="mx-auto max-w-3xl">
+        <div className="border-t border-[var(--c-border)] bg-[var(--c-bg)] input-safe-bottom">
+          <div className="mx-auto max-w-3xl px-2 sm:px-4 py-2 sm:py-3">
             {attachedImages.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
+              <div className="mb-2 flex flex-wrap gap-2">
                 {attachedImages.map((img, i) => (
                   <div key={i} className="group relative">
-                    <img src={img} alt="" className="h-16 w-16 rounded-lg border border-[var(--c-border)] object-cover" />
-                    <button onClick={() => setAttachedImages(p => p.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"><IconX className="w-3 h-3" /></button>
+                    <img src={img} alt="" className="h-14 w-14 sm:h-16 sm:w-16 rounded-lg border border-[var(--c-border)] object-cover" />
+                    <button onClick={() => setAttachedImages(p => p.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 rounded-full bg-red-500 p-0.5 text-white active:scale-90 touch-manipulation"><IconX className="w-3 h-3" /></button>
                   </div>
                 ))}
               </div>
             )}
-            <form onSubmit={handleSend} className="flex items-end gap-2">
+            <form onSubmit={handleSend} className="flex items-end gap-1.5 sm:gap-2">
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)]" title="Upload image"><IconImage /></button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-[var(--c-text3)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text2)] active:scale-95 touch-manipulation" title="Upload image"><IconImage className="w-5 h-5" /></button>
               <div className="relative flex-1">
-                <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Type a message..." rows={1} className="w-full resize-none rounded-xl border border-[var(--c-border)] bg-[var(--c-input-bg)] px-4 py-3 pr-12 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none transition-all focus:border-[var(--c-accent-border)] focus:ring-1 focus:ring-[var(--c-accent-glow)]" style={{ maxHeight: '200px' }} />
+                <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Message Alex..." rows={1} className="w-full resize-none rounded-xl border border-[var(--c-border)] bg-[var(--c-input-bg)] px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-[var(--c-text)] placeholder-[var(--c-text3)] outline-none transition-all focus:border-[var(--c-accent-border)] focus:ring-1 focus:ring-[var(--c-accent-glow)]" style={{ maxHeight: '160px' }} />
               </div>
               {isLoading ? (
-                <button type="button" onClick={handleStop} className="shrink-0 rounded-xl bg-red-500/20 p-2.5 text-red-400 hover:bg-red-500/30" title="Stop"><IconStop /></button>
+                <button type="button" onClick={handleStop} className="shrink-0 rounded-xl bg-red-500/20 p-2.5 text-red-400 hover:bg-red-500/30 active:scale-95 touch-manipulation" title="Stop"><IconStop /></button>
               ) : (
-                <button type="submit" disabled={!input.trim() && attachedImages.length === 0} className="shrink-0 rounded-xl bg-[var(--c-accent)] p-2.5 text-white transition-all hover:opacity-90 disabled:opacity-30" title="Send"><IconSend /></button>
+                <button type="submit" disabled={!input.trim() && attachedImages.length === 0} className="shrink-0 rounded-xl bg-[var(--c-accent)] p-2.5 text-white transition-all hover:opacity-90 disabled:opacity-30 active:scale-95 touch-manipulation" title="Send"><IconSend /></button>
               )}
             </form>
-            <p className="mt-2 text-center text-[11px] text-[var(--c-text4)]">{getModelShortName(selectedModel)} · Shift+Enter for new line</p>
+            <p className="mt-1.5 text-center text-[10px] sm:text-[11px] text-[var(--c-text4)]">
+              <span className="hidden sm:inline">{getModelShortName(selectedModel)} · </span>
+              Shift+Enter for new line
+            </p>
           </div>
         </div>
       </div>
