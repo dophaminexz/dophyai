@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   THEME: Dark Mode
+   ============================================================================= */
+[data-mode="dark"] {
+  --c-bg: #0d1117;
+  --c-bg2: #0a0e16;
+  --c-surface: rgba(255,255,255,0.03);
+  --c-surface-h: rgba(255,255,255,0.06);
+  --c-surface-active: rgba(255,255,255,0.08);
+  --c-border: rgba(255,255,255,0.06);
+  --c-border-h: rgba(255,255,255,0.12);
+  --c-text: #e2e8f0;
+  --c-text2: #94a3b8;
+  --c-text3: #64748b;
+  --c-text4: #334155;
+  --c-input-bg: rgba(255,255,255,0.04);
+  --c-code-bg: #161b26;
+  --c-code-border: rgba(255,255,255,0.06);
+  --c-overlay: rgba(0,0,0,0.5);
+  color-scheme: dark;
+}
+
+/* =============================================================================
+   THEME: Light Mode
+   ============================================================================= */
+[data-mode="light"] {
+  --c-bg: #ffffff;
+  --c-bg2: #f8fafc;
+  --c-surface: rgba(0,0,0,0.025);
+  --c-surface-h: rgba(0,0,0,0.05);
+  --c-surface-active: rgba(0,0,0,0.07);
+  --c-border: rgba(0,0,0,0.08);
+  --c-border-h: rgba(0,0,0,0.15);
+  --c-text: #1e293b;
+  --c-text2: #475569;
+  --c-text3: #94a3b8;
+  --c-text4: #cbd5e1;
+  --c-input-bg: rgba(0,0,0,0.03);
+  --c-code-bg: #f1f5f9;
+  --c-code-border: rgba(0,0,0,0.08);
+  --c-overlay: rgba(0,0,0,0.3);
+  color-scheme: light;
+}
+
+/* =============================================================================
+   ACCENT: Indigo
+   ============================================================================= */
+[data-accent="indigo"] {
+  --c-accent: #6366f1;
+  --c-accent-h: #818cf8;
+  --c-accent-t: #a5b4fc;
+  --c-accent-bg: rgba(99,102,241,0.1);
+  --c-accent-glow: rgba(99,102,241,0.2);
+  --c-accent-border: rgba(99,102,241,0.3);
+}
+[data-mode="light"][data-accent="indigo"] {
+  --c-accent-t: #4f46e5;
+  --c-accent-bg: rgba(99,102,241,0.08);
+}
+
+/* =============================================================================
+   ACCENT: Emerald
+   ============================================================================= */
+[data-accent="emerald"] {
+  --c-accent: #10b981;
+  --c-accent-h: #34d399;
+  --c-accent-t: #6ee7b7;
+  --c-accent-bg: rgba(16,185,129,0.1);
+  --c-accent-glow: rgba(16,185,129,0.2);
+  --c-accent-border: rgba(16,185,129,0.3);
+}
+[data-mode="light"][data-accent="emerald"] {
+  --c-accent-t: #059669;
+  --c-accent-bg: rgba(16,185,129,0.08);
+}
+
+/* =============================================================================
+   ACCENT: Rose
+   ============================================================================= */
+[data-accent="rose"] {
+  --c-accent: #f43f5e;
+  --c-accent-h: #fb7185;
+  --c-accent-t: #fda4af;
+  --c-accent-bg: rgba(244,63,94,0.1);
+  --c-accent-glow: rgba(244,63,94,0.2);
+  --c-accent-border: rgba(244,63,94,0.3);
+}
+[data-mode="light"][data-accent="rose"] {
+  --c-accent-t: #e11d48;
+  --c-accent-bg: rgba(244,63,94,0.08);
+}
+
+/* =============================================================================
+   ACCENT: Amber
+   ============================================================================= */
+[data-accent="amber"] {
+  --c-accent: #f59e0b;
+  --c-accent-h: #fbbf24;
+  --c-accent-t: #fcd34d;
+  --c-accent-bg: rgba(245,158,11,0.1);
+  --c-accent-glow: rgba(245,158,11,0.2);
+  --c-accent-border: rgba(245,158,11,0.3);
+}
+[data-mode="light"][data-accent="amber"] {
+  --c-accent-t: #b45309;
+  --c-accent-bg: rgba(245,158,11,0.08);
+}
+
+/* =============================================================================
+   Base
+   ============================================================================= */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-accent-glow) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--c-accent-glow); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--c-accent-border); }
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--c-accent-glow);
+  color: var(--c-text);
+}
+
+/* =============================================================================
+   Markdown / Prose — Dark Mode
+   ============================================================================= */
+.prose-custom .katex {
+  color: var(--c-accent-t);
+  font-size: 1.05em;
+}
+.prose-custom .katex-display {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: var(--c-accent-bg);
+  border-radius: 0.75rem;
+  border: 1px solid var(--c-accent-glow);
+  overflow-x: auto;
+}
+.prose-custom .katex-display > .katex {
+  color: var(--c-accent-h);
+}
+.prose-custom pre {
+  background: var(--c-code-bg) !important;
+  border: 1px solid var(--c-code-border);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+.prose-custom pre code {
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+.prose-custom table { border-collapse: collapse; }
+.prose-custom table tr:nth-child(even) { background: var(--c-surface); }
+.prose-custom table tr:hover { background: var(--c-accent-bg); }
+.prose-custom blockquote p { margin: 0.25rem 0; }
+.prose-custom strong { color: var(--c-text); font-weight: 600; }
+.prose-custom em { color: var(--c-text2); }
+.prose-custom hr { border-color: var(--c-border); }
+.prose-custom img { border-radius: 0.75rem; border: 1px solid var(--c-border); max-width: 100%; }
+.prose-custom li { color: var(--c-text2); }
+.prose-custom li::marker { color: var(--c-accent); }
+
+/* =============================================================================
+   Code Syntax: Light Mode overrides for highlight.js
+   ============================================================================= */
+[data-mode="light"] .hljs { background: var(--c-code-bg) !important; color: #24292f; }
+[data-mode="light"] .hljs-keyword { color: #cf222e; }
+[data-mode="light"] .hljs-string { color: #0a3069; }
+[data-mode="light"] .hljs-number { color: #0550ae; }
+[data-mode="light"] .hljs-comment { color: #6e7781; }
+[data-mode="light"] .hljs-function { color: #8250df; }
+[data-mode="light"] .hljs-title { color: #8250df; }
+[data-mode="light"] .hljs-built_in { color: #0550ae; }
+[data-mode="light"] .hljs-literal { color: #0550ae; }
+[data-mode="light"] .hljs-type { color: #116329; }
+[data-mode="light"] .hljs-params { color: #24292f; }
+[data-mode="light"] .hljs-meta { color: #6e7781; }
+[data-mode="light"] .hljs-attr { color: #953800; }
+[data-mode="light"] .hljs-variable { color: #24292f; }
+[data-mode="light"] .hljs-name { color: #116329; }
+[data-mode="light"] .hljs-selector-class { color: #116329; }
+[data-mode="light"] .hljs-selector-tag { color: #116329; }
+[data-mode="light"] .hljs-selector-id { color: #0550ae; }
+[data-mode="light"] .hljs-tag { color: #116329; }
+[data-mode="light"] .hljs-attribute { color: #0550ae; }
+[data-mode="light"] .hljs-symbol { color: #0550ae; }
+[data-mode="light"] .hljs-addition { color: #116329; background: #dafbe1; }
+[data-mode="light"] .hljs-deletion { color: #82071e; background: #ffebe9; }
+
+/* =============================================================================
+   Animations
+   ============================================================================= */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.group[class*="flex"][class*="gap-3"] {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* =============================================================================
+   Misc
+   ============================================================================= */
+textarea {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+textarea::placeholder {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.katex-html {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+@media (max-width: 640px) {
+  .prose-custom pre {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    border-radius: 0.5rem;
+  }
+  .prose-custom .katex-display {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    border-radius: 0.5rem;
+  }
+}
